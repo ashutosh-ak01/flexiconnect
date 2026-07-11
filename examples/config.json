@@ -1,0 +1,45 @@
+{
+  "api_name": "httpbin",
+  "version": "v1",
+  "is_active": true,
+  "config": {
+    "base_url": "https://httpbin.org",
+    "timeout_ms": 5000,
+    "retry_policy": {
+      "max_attempts": 3,
+      "backoff_ms": 200
+    },
+    "circuit_breaker": {
+      "max_requests": 3,
+      "interval_sec": 10,
+      "timeout_sec": 5,
+      "consecutive_failures": 2
+    },
+    "tracking": {
+      "enabled": true,
+      "mask_headers": ["Authorization", "Custom-Sensitive-Header"],
+      "mask_request_keys": ["password", "token"],
+      "mask_response_keys": ["auth_key"]
+    },
+    "endpoints": [
+      {
+        "name": "post_test",
+        "method": "POST",
+        "path": "/post",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{ secret \"HTTPBIN_BEARER_TOKEN\" }}",
+          "Custom-Sensitive-Header": "SomeSecretVal"
+        },
+        "body_template": "{\n  \"username\": \"{{ .input.user }}\",\n  \"password\": \"{{ .input.pass }}\",\n  \"meta\": {\n    \"env\": \"production\"\n  }\n}",
+        "response_transformation": {
+          "client_ip": "$.origin",
+          "header_check": "$.headers.Authorization",
+          "custom_header_check": "$.headers.Custom-Sensitive-Header",
+          "posted_username": "$.json.username",
+          "posted_password": "$.json.password"
+        }
+      }
+    ]
+  }
+}
