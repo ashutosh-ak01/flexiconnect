@@ -11,11 +11,12 @@ import (
 	"github.com/sony/gobreaker"
 )
 
+// Client wraps an http.Client with retry policies and circuit breaker support.
 type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient creates a new Client wrapper
+// NewClient initializes a Client with the specified HTTP request timeout.
 func NewClient(timeout time.Duration) *Client {
 	return &Client{
 		httpClient: &http.Client{
@@ -24,9 +25,8 @@ func NewClient(timeout time.Duration) *Client {
 	}
 }
 
-// Do executes the HTTP request wrapped with retries and a circuit breaker
+// Do dispatches the request, wrapping it in a circuit breaker and/or retry policy if configured.
 func (c *Client) Do(ctx context.Context, req *http.Request, retryCfg *config.RetryConfig, cb *gobreaker.CircuitBreaker) (*http.Response, error) {
-	// If a circuit breaker is provided, execute request through it
 	if cb != nil {
 		respVal, err := cb.Execute(func() (interface{}, error) {
 			return c.executeWithRetry(ctx, req, retryCfg)
@@ -37,7 +37,6 @@ func (c *Client) Do(ctx context.Context, req *http.Request, retryCfg *config.Ret
 		return respVal.(*http.Response), nil
 	}
 
-	// Otherwise execute normal request with retries
 	return c.executeWithRetry(ctx, req, retryCfg)
 }
 
@@ -58,27 +57,22 @@ func (c *Client) executeWithRetry(ctx context.Context, req *http.Request, retryC
 	var resp *http.Response
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Clone request to allow multiple dispatch attempts
+		// Clone request to support dispatch retries with pristine body readers
 		clonedReq := req.Clone(ctx)
-		if req.Body != nil {
-			// If body is present, reset/seek the body reader if possible
-			// For http.Request, req.GetBody is the standard way to clone body readers
-			if req.GetBody != nil {
-				body, err := req.GetBody()
-				if err == nil {
-					clonedReq.Body = body
-				}
+		if req.Body != nil && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err == nil {
+				clonedReq.Body = body
 			}
 		}
 
 		resp, lastErr = c.httpClient.Do(clonedReq)
 		if lastErr == nil {
-			// If request returns a status code we shouldn't retry, return it
 			if !c.isRetryable(resp.StatusCode, retryCfg) {
 				return resp, nil
 			}
 			
-			// If it's a retryable error, we close the body so we don't leak connections, and retry
+			// Close the body on retryable failures to prevent TCP connection leaks
 			resp.Body.Close()
 			lastErr = fmt.Errorf("server returned retryable error status: %d", resp.StatusCode)
 		}
@@ -88,7 +82,6 @@ func (c *Client) executeWithRetry(ctx context.Context, req *http.Request, retryC
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(backoff):
-				// Exponential backoff
 				backoff *= 2
 			}
 		}
@@ -99,7 +92,6 @@ func (c *Client) executeWithRetry(ctx context.Context, req *http.Request, retryC
 
 func (c *Client) isRetryable(statusCode int, retryCfg *config.RetryConfig) bool {
 	if retryCfg == nil || len(retryCfg.RetryableStatusCodes) == 0 {
-		// Default behavior: retry on standard server errors
 		return statusCode >= 500
 	}
 	for _, code := range retryCfg.RetryableStatusCodes {
@@ -110,7 +102,7 @@ func (c *Client) isRetryable(statusCode int, retryCfg *config.RetryConfig) bool 
 	return false
 }
 
-// DrainAndClose helper to exhaust and close response body
+// DrainAndClose exhausts the response body reader to allow connection reuse.
 func DrainAndClose(body io.ReadCloser) {
 	if body == nil {
 		return
