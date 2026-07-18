@@ -1,115 +1,100 @@
 # FlexiConnect
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/ashutosh-ak01/flexiconnect.svg)](https://pkg.go.dev/github.com/ashutosh-ak01/flexiconnect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**FlexiConnect** is a flexible, configuration-driven API integration engine in Go. Integrate, secure, and monitor any external HTTP API simply by defining a JSON/YAML configuration.
+**FlexiConnect** is a flexible, configuration-driven API Gateway & Integration Engine. Integrate, secure, and monitor any external HTTP API simply by defining a configuration, and expose it internally via a clean, unified REST interface.
 
 ---
 
 ## ✨ Features
 
-- ⚙️ **Config-Driven:** Add new API integrations dynamically without deploying new code.
+- ⚙️ **Standalone API Gateway:** Deploy FlexiConnect as a daemon or Docker container to centralize all 3rd-party vendor integrations.
+- 🔄 **Config-Driven:** Add new API integrations dynamically without deploying new code.
 - 🔄 **Payload Transformations:** Dynamically map request payloads using Go templates, and extract/reshape response bodies using JSONPath.
-- 🔑 **Pluggable Secrets:** Resolve auth credentials at runtime from environment variables, files, or AWS Secrets Manager.
-- ⚡ **Local Circuit Breakers:** Protect your application from cascade failures using per-API/endpoint local circuit breakers.
-- 🔒 **PII Masking & Tracking:** Asynchronously audit request/response metadata and payloads with automatic masking of sensitive headers and JSON keys.
-- ⏱️ **Latency Metrics:** Automatically track request processing durations.
+- 🔑 **Centralized Secrets:** Resolve auth credentials securely from environment variables or Secrets Managers. Your internal microservices never need to know the vendor API keys.
+- ⚡ **Global Circuit Breakers:** Protect your systems from cascade failures. If a vendor goes down, FlexiConnect trips the breaker for all incoming traffic automatically.
+- 🔒 **PII Masking & Tracking:** Asynchronously audit request/response metadata with automatic masking of sensitive headers and JSON keys.
 
 ---
 
 ## 🏗️ Architecture
 
 ```text
-  Client App 
-      │
-      ▼
-┌────────────────────────────────────────────────────────┐
-│ FlexiConnect Engine                                    │
-│                                                        │
-│  1. Resolve Config  ──► In-Memory / Postgres           │
-│  2. Fetch Secrets   ──► Environment / AWS Secrets      │
-│  3. Transform Req   ──► Go templates (JSON/Headers)    │
-│  4. Rate Limit      ──► Local Token Bucket             │
-│  5. Circuit Breaker ──► Local gobreaker                │
-│  6. Execute HTTP    ──► External HTTP Endpoint         │
-│  7. Transform Resp  ──► JSONPath Extraction            │
-│  8. Audit Track     ──► Async DB Logger (PII Masked)   │
-└────────────────────────────────────────────────────────┘
+  Internal Microservices 
+       │ (POST /v1/execute)
+       ▼
+┌────────────────────────────────────────────────────────────┐
+│ FlexiConnect API Gateway (Daemon)                          │
+│                                                            │
+│  1. HTTP Server     ──► Parses JSON payload                │
+│  2. Resolve Config  ──► In-Memory / Postgres               │
+│  3. Fetch Secrets   ──► Environment / AWS Secrets          │
+│  4. Transform Req   ──► Go templates (JSON/Headers)        │
+│  5. Circuit Breaker ──► Global gobreaker state             │
+│  6. Execute HTTP    ──► External Vendor Endpoint           │
+│  7. Transform Resp  ──► JSONPath Extraction                │
+│  8. Audit Track     ──► Async DB Logger (PII Masked)       │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Installation
+### 1. Installation
+
+You can download the pre-compiled binaries from the GitHub Releases page, or run it via Docker:
 
 ```bash
-go get github.com/ashutosh-ak01/flexiconnect
+docker pull ghcr.io/ashutosh-ak01/flexiconnect:latest
+docker run -p 8080:8080 ghcr.io/ashutosh-ak01/flexiconnect:latest
 ```
 
-### Simple Usage Example
+Or build from source:
 
-```go
-package main
+```bash
+git clone https://github.com/ashutosh-ak01/flexiconnect.git
+cd flexiconnect
+make build
+./bin/flexiconnect
+```
 
-import (
-	"context"
-	"fmt"
-	"log"
+### 2. Executing an Integration
 
-	"github.com/ashutosh-ak01/flexiconnect/pkg/config"
-	"github.com/ashutosh-ak01/flexiconnect/pkg/integration"
-	"github.com/ashutosh-ak01/flexiconnect/pkg/secret"
-)
+Once the gateway is running and a configuration is registered in the engine, your internal services can trigger an integration by sending a single POST request.
 
-func main() {
-	ctx := context.Background()
+**Request:**
+```bash
+curl -X POST http://localhost:8080/v1/execute \
+     -H "Content-Type: application/json" \
+     -d '{
+       "service": "stripe",
+       "version": "v1",
+       "action": "create_payment",
+       "payload": {
+         "amount": 2000,
+         "currency": "usd"
+       }
+     }'
+```
 
-	// 1. Initialize configuration registry (in-memory)
-	registry := config.NewInMemoryRegistry()
-
-	// 2. Load API configuration
-	apiCfg := &config.APIConfig{
-		APIName:  "stripe",
-		Version:  "v1",
-		IsActive: true,
-		Config: config.ConfigDetail{
-			BaseURL:   "https://api.stripe.com",
-			TimeoutMs: 5000,
-			Endpoints: []config.EndpointConfig{
-				{
-					Name:        "create_payment",
-					Method:      "POST",
-					Path:        "/v1/charges",
-					BodyTemplate: `{"amount": {{.input.amount}}, "currency": "{{.input.currency}}"}`,
-					ResponseTransformation: map[string]string{
-						"transaction_id": "$.id",
-						"status":         "$.status",
-					},
-				},
-			},
-		},
-	}
-	registry.Register(ctx, apiCfg)
-
-	// 3. Setup Secret Resolver & Engine
-	secretProvider := secret.NewEnvSecretProvider()
-	engine := integration.NewEngine(registry, secretProvider, nil)
-
-	// 4. Execute API request
-	input := map[string]interface{}{
-		"amount":   2000,
-		"currency": "usd",
-	}
-	
-	resp, err := engine.ExecuteRequest(ctx, "stripe", "", "create_payment", input)
-	if err != nil {
-		log.Fatalf("Error executing request: %v", err)
-	}
-
-	fmt.Printf("Response: %v\n", resp)
+**Response:**
+FlexiConnect will resolve the Stripe API keys, transform the payload, execute the request, run the success assertions, and extract just the fields you care about:
+```json
+{
+  "transaction_id": "ch_1J2Y3Z4",
+  "status": "succeeded"
 }
+```
+
+---
+
+## 🛠️ Advanced: Go Library Usage
+
+While FlexiConnect shines as a standalone API gateway, the core `Engine` is completely decoupled from the HTTP server and can be imported natively into your Go applications.
+
+```bash
+go get github.com/ashutosh-ak01/flexiconnect/pkg/integration
 ```
 
 ---
