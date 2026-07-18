@@ -71,7 +71,7 @@ func (c *Client) executeWithRetry(ctx context.Context, req *http.Request, retryC
 			if !c.isRetryable(resp.StatusCode, retryCfg) {
 				return resp, nil
 			}
-			
+
 			// Close the body on retryable failures to prevent TCP connection leaks
 			resp.Body.Close()
 			lastErr = fmt.Errorf("server returned retryable error status: %d", resp.StatusCode)

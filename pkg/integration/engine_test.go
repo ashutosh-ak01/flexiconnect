@@ -305,4 +305,3 @@ func TestCustomRetryPolicies(t *testing.T) {
 		t.Errorf("Expected 3 request attempts, got: %d", attempts)
 	}
 }
-
