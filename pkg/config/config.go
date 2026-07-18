@@ -15,14 +15,14 @@ type APIConfig struct {
 
 // ConfigDetail contains the actual operational endpoints, auth, and resiliency configurations
 type ConfigDetail struct {
-	BaseURL        string            `json:"base_url"`
-	TimeoutMs      int               `json:"timeout_ms"`
-	RetryPolicy    *RetryConfig      `json:"retry_policy,omitempty"`
-	CircuitBreaker *CBConfig         `json:"circuit_breaker,omitempty"`
-	RateLimiting   *RateLimitConfig  `json:"rate_limiting,omitempty"`
-	Auth           *AuthConfig       `json:"auth,omitempty"`
-	Tracking       *TrackingConfig   `json:"tracking,omitempty"`
-	Endpoints      []EndpointConfig  `json:"endpoints"`
+	BaseURL        string           `json:"base_url"`
+	TimeoutMs      int              `json:"timeout_ms"`
+	RetryPolicy    *RetryConfig     `json:"retry_policy,omitempty"`
+	CircuitBreaker *CBConfig        `json:"circuit_breaker,omitempty"`
+	RateLimiting   *RateLimitConfig `json:"rate_limiting,omitempty"`
+	Auth           *AuthConfig      `json:"auth,omitempty"`
+	Tracking       *TrackingConfig  `json:"tracking,omitempty"`
+	Endpoints      []EndpointConfig `json:"endpoints"`
 }
 
 // RetryConfig outlines backoff and retry limitations

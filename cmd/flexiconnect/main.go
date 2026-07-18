@@ -4,7 +4,14 @@ import (
 	"fmt"
 )
 
+// Injected during build time via -ldflags linker settings
+var (
+	Version   = "dev"
+	Commit    = "none"
+	BuildTime = "unknown"
+)
+
 func main() {
-	fmt.Println("FlexiConnect Daemon v1.0.0")
+	fmt.Printf("FlexiConnect Daemon %s (commit: %s, build time: %s)\n", Version, Commit, BuildTime)
 	fmt.Println("Run 'make help' to see all available commands.")
 }

@@ -28,9 +28,15 @@ help:
 	@echo "  run         Run the example main program"
 	@echo "  clean       Clean built binaries"
 
+# Build Flags
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS = -ldflags "-X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILD_TIME)"
+
 build:
 	mkdir -p bin
-	$(GOBUILD) -o bin/$(BINARY_NAME) cmd/flexiconnect/main.go
+	$(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/flexiconnect/main.go
 
 test:
 	$(GOTEST) -v ./...

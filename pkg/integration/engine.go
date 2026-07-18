@@ -26,7 +26,7 @@ type Engine struct {
 	requestTransformer  *transform.RequestTransformer
 	responseTransformer *transform.ResponseTransformer
 	httpClient          *Client
-	
+
 	breakersMu sync.RWMutex
 	breakers   map[string]*gobreaker.CircuitBreaker // key format: api:version:endpoint
 }
@@ -117,7 +117,7 @@ func (e *Engine) ExecuteRequest(ctx context.Context, apiName string, version str
 		defer DrainAndClose(resp.Body)
 		responseStatusCode = resp.StatusCode
 		responseHeaders = resp.Header
-		
+
 		responseBodyBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
 			executionErr = fmt.Errorf("failed to read response body: %w", err)
