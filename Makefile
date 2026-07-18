@@ -21,9 +21,10 @@ help:
 	@echo "Targets:"
 	@echo "  build       Build the daemon/cli binary"
 	@echo "  test        Run all unit tests"
+	@echo "  test-race   Run all unit tests with race detector enabled"
 	@echo "  test-cover  Run all unit tests with coverage reporting"
 	@echo "  fmt         Run go fmt against codebase"
-	@echo "  lint        Run go vet against codebase"
+	@echo "  lint        Run golangci-lint (falls back to go vet if not installed)"
 	@echo "  tidy        Run go mod tidy to lock dependencies"
 	@echo "  run         Run the example main program"
 	@echo "  clean       Clean built binaries"
@@ -41,6 +42,9 @@ build:
 test:
 	$(GOTEST) -v ./...
 
+test-race:
+	$(GOTEST) -race -v ./...
+
 test-cover:
 	$(GOTEST) -coverprofile=coverage.out -v ./...
 	$(GOCMD) tool cover -html=coverage.out
@@ -49,7 +53,12 @@ fmt:
 	$(GOFMT) ./...
 
 lint:
-	$(GOVET) ./...
+	@if command -v golangci-lint >/dev/null; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not installed, falling back to go vet"; \
+		$(GOVET) ./...; \
+	fi
 
 tidy:
 	$(GOMOD) tidy
