@@ -25,11 +25,8 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+      - name: Run Linter
+        run: make lint
 
   test:
     name: Test with Race Detector
